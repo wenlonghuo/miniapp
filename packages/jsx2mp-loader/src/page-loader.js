@@ -6,7 +6,7 @@ const cached = require('./cached');
 const { removeExt, isFromTargetDirs, doubleBackslash, normalizeOutputFilePath, addRelativePathPrefix, getHighestPriorityPackage } = require('./utils/pathHelper');
 const eliminateDeadCode = require('./utils/dce');
 const processCSS = require('./styleProcessor');
-const output = require('./output');
+const { output } = require('./output');
 const { isTypescriptFile } = require('./utils/judgeModule');
 const parse = require('./utils/parseRequest');
 
@@ -21,7 +21,7 @@ module.exports = async function pageLoader(content) {
   }
 
   const loaderOptions = getOptions(this);
-  const { platform, entryPath, mode, disableCopyNpm, constantDir, turnOffSourceMap, outputPath, aliasEntries, injectAppCssComponent } = loaderOptions;
+  const { rootDir, platform, entryPath, mode, disableCopyNpm, constantDir, turnOffSourceMap, outputPath, aliasEntries, injectAppCssComponent } = loaderOptions;
   const resourcePath = this.resourcePath;
   const rootContext = this.rootContext;
   const absoluteConstantDir = constantDir.map(dir => join(rootContext, dir));
@@ -46,7 +46,6 @@ module.exports = async function pageLoader(content) {
     turnOffSourceMap,
     aliasEntries
   });
-
   const rawContentAfterDCE = eliminateDeadCode(content);
 
   let transformed;
@@ -129,7 +128,8 @@ module.exports = async function pageLoader(content) {
     },
     mode,
     platform,
-    isTypescriptFile: isTypescriptFile(this.resourcePath)
+    isTypescriptFile: isTypescriptFile(this.resourcePath),
+    rootDir,
   };
 
   output(outputContent, content, outputOption);

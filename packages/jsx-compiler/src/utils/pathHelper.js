@@ -1,5 +1,7 @@
 const { sep } = require('path');
 
+const SCRIPT_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.json'];
+
 function getNpmName(value) {
   const isScopedNpm = /^_?@/.test(value);
   return value.split(sep).slice(0, isScopedNpm ? 2 : 1).join(sep);
@@ -37,10 +39,29 @@ function normalizeLocalFilePath(filepath) {
   return filepath.replace(/\\|\//g, sep);
 }
 
+/**
+ *
+ * @param {string} path
+ */
+function isFilenameCSS(path) {
+  return /\.(css|sass|less|scss|styl)$/i.test(path);
+}
+
+/**
+ *
+ * @param {string} path
+ */
+function isFilenameCSSModule(path) {
+  return /\.module\.(css|sass|less|scss|styl)$/i.test(path);
+}
+
 module.exports = {
   getNpmName,
   normalizeFileName,
   addRelativePathPrefix,
   normalizeOutputFilePath,
-  normalizeLocalFilePath
+  normalizeLocalFilePath,
+  isFilenameCSS,
+  isFilenameCSSModule,
+  SCRIPT_FILE_EXTENSIONS
 };

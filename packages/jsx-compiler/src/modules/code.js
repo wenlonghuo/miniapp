@@ -6,8 +6,7 @@ const isClassComponent = require('../utils/isClassComponent');
 const isFunctionComponent = require('../utils/isFunctionComponent');
 const traverse = require('../utils/traverseNodePath');
 const { isNpmModule, isWeexModule } = require('../utils/checkModule');
-const { getNpmName, normalizeFileName, addRelativePathPrefix, normalizeOutputFilePath } = require('../utils/pathHelper');
-const { BINDING_REG } = require('../utils/checkAttr');
+const { getNpmName, normalizeFileName, addRelativePathPrefix, normalizeOutputFilePath, SCRIPT_FILE_EXTENSIONS } = require('../utils/pathHelper');
 
 const RAX_PACKAGE = 'rax';
 const SUPER_COMPONENT = 'Component';
@@ -117,15 +116,13 @@ module.exports = {
     const targetFileDir = dirname(join(outputPath, relative(sourcePath, resourcePath)));
     const runtimePath = getRuntimePath(outputPath, targetFileDir, platform, disableCopyNpm);
     removeRaxImports(ast);
-    ensureIndexPathInImports(ast, resourcePath); // In WeChat miniapp, `require` can't get index file if index is omitted
+    ensureIndexPathInImports(ast, sourcePath, resourcePath); // In WeChat miniapp, `require` can't get index file if index is omitted
     renameCoreModule(ast, runtimePath);
     renameFileModule(ast);
     renameAppConfig(ast, sourcePath, resourcePath);
 
     if (!disableCopyNpm) {
-      const currentNodeModulePath = join(sourcePath, 'npm');
-      const npmRelativePath = relative(dirname(resourcePath), currentNodeModulePath);
-      renameNpmModules(ast, npmRelativePath, resourcePath, cwd);
+      renameNpmModules(ast, targetFileDir, outputPath, cwd);
     }
 
     if (type !== 'app') {
@@ -266,8 +263,7 @@ function renameAppConfig(ast, sourcePath, resourcePath) {
     ImportDeclaration(path) {
       const source = path.get('source');
       if (source.isStringLiteral()) {
-        const appConfigSourcePath = join(resourcePath, '..', source.node.value);
-        if (appConfigSourcePath === join(sourcePath, 'app.json')) {
+        if (isImportAppJSON(source.node.value, resourcePath, sourcePath)) {
           const replacement = source.node.value.replace(/app\.json/, 'app.config.js');
           source.replaceWith(t.stringLiteral(replacement));
         }
@@ -276,11 +272,11 @@ function renameAppConfig(ast, sourcePath, resourcePath) {
   });
 }
 
-function ensureIndexPathInImports(ast, resourcePath) {
+function ensureIndexPathInImports(ast, sourcePath, resourcePath) {
   traverse(ast, {
     ImportDeclaration(path) {
       const source = path.get('source');
-      if (source.isStringLiteral() && isRelativeImport(source.node.value)) {
+      if (source.isStringLiteral() && isRelativeImport(source.node.value) && !isImportAppJSON(source.node.value, resourcePath, sourcePath)) {
         const replacement = ensureIndexInPath(source.node.value, resourcePath);
         source.replaceWith(t.stringLiteral(replacement));
       }
@@ -288,8 +284,8 @@ function ensureIndexPathInImports(ast, resourcePath) {
   });
 }
 
-function renameNpmModules(ast, npmRelativePath, filename, cwd) {
-  const source = (value, prefix, filename, rootContext) => {
+function renameNpmModules(ast, targetFileDir, outputPath, cwd) {
+  const source = (value, targetFileDir, outputPath, rootContext) => {
     const npmName = getNpmName(value);
     const nodeModulePath = join(rootContext, 'node_modules');
     const searchPaths = [nodeModulePath];
@@ -309,9 +305,9 @@ function renameNpmModules(ast, npmRelativePath, filename, cwd) {
 
     let ret;
     if (npmName === value) {
-      ret = join(prefix, realNpmName, modulePathSuffix);
+      ret = relative(targetFileDir, join(outputPath, 'npm', realNpmName, modulePathSuffix));
     } else {
-      ret = join(prefix, value.replace(npmName, realNpmName));
+      ret = relative(targetFileDir, join(outputPath, 'npm', value.replace(npmName, realNpmName)));
     }
     ret = addRelativePathPrefix(normalizeOutputFilePath(ret));
     // ret => '../npm/_ali/universal-toast/lib/index.js
@@ -325,7 +321,7 @@ function renameNpmModules(ast, npmRelativePath, filename, cwd) {
       if (isWeexModule(value)) {
         path.remove();
       } else if (isNpmModule(value)) {
-        path.node.source = source(value, npmRelativePath, filename, cwd);
+        path.node.source = source(value, targetFileDir, outputPath, cwd);
       }
     }
   });
@@ -584,7 +580,7 @@ function addRegisterRefs(refs, renderFunctionPath) {
  */
 function ensureIndexInPath(value, resourcePath) {
   const target = resolveModule.sync(resolve(dirname(resourcePath), value), {
-    extensions: ['.js', '.ts', '.jsx', '.tsx']
+    extensions: SCRIPT_FILE_EXTENSIONS
   });
   const result = relative(dirname(resourcePath), target);
   return removeJSExtension(addRelativePathPrefix(normalizeOutputFilePath(result)));
@@ -592,8 +588,18 @@ function ensureIndexInPath(value, resourcePath) {
 
 function removeJSExtension(filePath) {
   const ext = extname(filePath);
-  if (ext === '.js' || ext === '.ts') {
+  if (SCRIPT_FILE_EXTENSIONS.indexOf(ext) > -1) {
     return filePath.slice(0, filePath.length - ext.length);
   }
   return filePath;
+}
+/**
+ * check whether import app.json
+ * @param {string} mod imported module name
+ * @param {string} resourcePath current file path
+ * @param {string} sourcePath src path
+ */
+function isImportAppJSON(mod, resourcePath, sourcePath) {
+  const appConfigSourcePath = join(sourcePath, 'app.json');
+  return resolve(dirname(resourcePath), mod) === appConfigSourcePath;
 }

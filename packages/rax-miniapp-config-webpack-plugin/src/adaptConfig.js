@@ -63,10 +63,26 @@ const configKeyMap = {
 const configValueMap = {
   [MINIAPP]: {
     window: {
-      pullRefresh: {
+      allowsBounceVertical: {
         true: 'YES',
         false: 'NO'
-      }
+      },
+      titlePenetrate: {
+        true: 'YES',
+        false: 'NO'
+      },
+      showTitleLoading: {
+        true: 'YES',
+        false: 'NO'
+      },
+      gestureBack: {
+        true: 'YES',
+        false: 'NO'
+      },
+      enableScrollBar: {
+        true: 'YES',
+        false: 'NO'
+      },
     }
   }
 };
@@ -88,7 +104,7 @@ module.exports = function adaptConfig(originalConfig, property, target) {
     ) {
       key = configKeyAdapter[configKey];
     }
-    if (configValueAdapter && configValueAdapter[configKey]) {
+    if (configValueAdapter && configValueAdapter[configKey] && configValueAdapter[configKey][value] !== undefined) {
       value = configValueAdapter[configKey][value];
     }
     config[key] = value;

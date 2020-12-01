@@ -7,7 +7,7 @@ const eliminateDeadCode = require('./utils/dce');
 const defaultStyle = require('./defaultStyle');
 const { QUICKAPP } = require('./constants');
 const processCSS = require('./styleProcessor');
-const output = require('./output');
+const { output } = require('./output');
 const { isTypescriptFile } = require('./utils/judgeModule');
 const parse = require('./utils/parseRequest');
 
@@ -30,7 +30,7 @@ module.exports = async function appLoader(content) {
   }
 
   const loaderOptions = getOptions(this);
-  const { entryPath, outputPath, platform, mode, disableCopyNpm, turnOffSourceMap, aliasEntries } = loaderOptions;
+  const { rootDir, entryPath, outputPath, platform, mode, disableCopyNpm, turnOffSourceMap, aliasEntries } = loaderOptions;
   const rawContent = content;
 
   if (!existsSync(outputPath)) mkdirpSync(outputPath);
@@ -49,7 +49,8 @@ module.exports = async function appLoader(content) {
     sourceFileName: this.resourcePath,
     disableCopyNpm,
     turnOffSourceMap,
-    aliasEntries
+    aliasEntries,
+    modernMode: !!rootDir
   });
 
   const rawContentAfterDCE = eliminateDeadCode(rawContent);
@@ -85,6 +86,7 @@ module.exports = async function appLoader(content) {
     isTypescriptFile: isTypescriptFile(this.resourcePath),
     type: 'app',
     platform,
+    rootDir,
   };
 
   output(outputContent, rawContent, outputOption);
