@@ -1,14 +1,14 @@
+// eslint-disable-next-line import/no-extraneous-dependencies
+import { isMiniApp, isWeChatMiniProgram } from 'universal-env';
+
 import cache from '../utils/cache';
 import injectLifeCycle from '../bridge/injectLifeCycle';
 import createEventProxy from '../bridge/createEventProxy';
-import perf from '../utils/perf';
 import createDocument from '../document';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import { isMiniApp } from 'universal-env';
 import { BODY_NODE_ID } from '../constants';
-import { createWindow } from '../window';
+import createWindow from '../window';
 
-export function getBaseLifeCycles(route, init, packageName = 'main') {
+export function getBaseLifeCycles(route, init, packageName = '') {
   return {
     onLoad(query) {
       // eslint-disable-next-line no-undef
@@ -40,6 +40,9 @@ export function getBaseLifeCycles(route, init, packageName = 'main') {
       }
       // Bind page internal to page document
       this.document._internal = this;
+      if (isWeChatMiniProgram) {
+        cache.setPageInstance(this);
+      }
       this.query = query;
       // Update location page options
       this.window.history.location.__updatePageOption(query);
@@ -64,6 +67,8 @@ export function getBaseLifeCycles(route, init, packageName = 'main') {
         this.window.__pageId = this.pageId;
         if (!this.firstRender) {
           this.renderInfo && this.renderInfo.setDocument(this.document);
+          // Update location page options
+          this.window.history.location.__updatePageOption(this.query);
         }
         this.document.$$trigger('miniapp_pageshow');
         // compatible with original name
@@ -95,7 +100,7 @@ export function getBaseLifeCycles(route, init, packageName = 'main') {
   };
 }
 
-export default function(route, lifeCycles = [], init, packageName = 'main') {
+export default function(route, lifeCycles = [], init, packageName = '') {
   const pageConfig = {
     firstRender: true,
     data: {

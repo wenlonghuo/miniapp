@@ -1,6 +1,8 @@
 const {
   getAppConfig,
   filterNativePages,
+  platformMap,
+  pathHelper: { getPlatformExtensions },
 } = require('miniapp-builder-shared');
 const getMiniAppBabelPlugins = require('rax-miniapp-babel-plugins');
 const MiniAppRuntimePlugin = require('rax-miniapp-runtime-webpack-plugin');
@@ -11,18 +13,18 @@ const { resolve, dirname } = require('path');
 /**
  * Set miniapp runtime project webpack config
  * @param {object} config - webpack config chain
- * @param {object} userConfig - user config for miniapp
  * @param {object} options
- * @param {object} options.context - webpack context
+ * @param {object} options.api - build scripts api
  * @param {string} options.target - miniapp platform
  * @param {string} options.babelRuleName - babel loader name in webpack chain
  */
 module.exports = (
   config,
-  userConfig,
-  { context, target, babelRuleName = 'babel', outputPath }
+  { api, target, babelRuleName = 'babel-loader', outputPath }
 ) => {
-  const { rootDir, command } = context;
+  const { context } = api;
+  const { rootDir, command, userConfig: rootUserConfig } = context;
+  const userConfig = rootUserConfig[target] || {};
 
   if (!outputPath) {
     outputPath = resolve(rootDir, 'build', target);
@@ -50,7 +52,7 @@ module.exports = (
   if (userConfig.subPackages) {
     appConfig.routes.forEach(app => {
       const subAppRoot = dirname(app.source);
-      const subAppConfig = getAppConfig(rootDir, target, null, subAppRoot);
+      const subAppConfig = getAppConfig(rootDir, target, nativeLifeCycleMap, subAppRoot);
       if (app.miniappMain) mainPackageRoot = subAppRoot;
       subAppConfig.miniappMain = app.miniappMain;
       subAppConfigList.push(subAppConfig);
@@ -70,11 +72,19 @@ module.exports = (
   // publicPath should not work in miniapp, just keep default value
   config.output.publicPath('/');
 
+  // Distinguish end construction
+  config.resolve.extensions
+    .clear()
+    .merge(
+      getPlatformExtensions(platformMap[target].type, ['.js', '.jsx', '.ts', '.tsx', '.json'])
+    );
+
   ['jsx', 'tsx'].forEach((ruleName) => {
     config.module
       .rule(ruleName)
       .use(babelRuleName)
       .tap((options) => {
+        options.cacheDirectory = false; // rax-miniapp-babel-plugins needs to be executed every time
         options.presets = [
           ...options.presets,
           {
@@ -105,15 +115,14 @@ module.exports = (
   ]);
   config.plugin('MiniAppRuntimePlugin').use(MiniAppRuntimePlugin, [
     {
+      api,
       routes: completeRoutes,
-      subPackages: userConfig.subPackages,
       mainPackageRoot,
+      appConfig,
+      subAppConfigList,
       target,
-      config: userConfig,
       usingComponents,
       nativeLifeCycleMap,
-      rootDir,
-      command,
       usingPlugins,
       needCopyList,
     },

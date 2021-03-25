@@ -1,11 +1,12 @@
-const ejs = require('ejs');
 const { join } = require('path');
-const adapter = require('../adapter');
+const { platformMap, pathHelper: { getBundlePath }} = require('miniapp-builder-shared');
+
 const getAssetPath = require('../utils/getAssetPath');
+const getSepProcessedPath = require('../utils/getSepProcessedPath');
 const addFileToCompilation = require('../utils/addFileToCompilation');
-const getTemplate = require('../utils/getTemplate');
-const { pathHelper: { getBundlePath }} = require('miniapp-builder-shared');
-const { MINIAPP } = require('../constants');
+const isNpmModule = require('../utils/isNpmModule');
+const rmCurDirPathSymbol = require('../utils/rmCurDirPathSymbol');
+const { RECURSIVE_TEMPLATE_TYPE } = require('../constants');
 
 function generatePageCSS(
   compilation,
@@ -14,8 +15,8 @@ function generatePageCSS(
   { target, command }
 ) {
   let pageCssContent = '/* required by usingComponents */\n';
-  const pageCssPath = `${pageRoute}.${adapter[target].css}`;
-  const subAppCssPath = `${getBundlePath(subAppRoot)}.css.${adapter[target].css}`;
+  const pageCssPath = `${pageRoute}${platformMap[target].extension.css}`;
+  const subAppCssPath = `${getBundlePath(subAppRoot)}.css${platformMap[target].extension.css}`;
   if (compilation.assets[subAppCssPath]) {
     pageCssContent += `@import "${getAssetPath(subAppCssPath, pageCssPath)}";`;
   }
@@ -32,27 +33,22 @@ function generatePageCSS(
 function generatePageJS(
   compilation,
   pageRoute,
-  nativeLifeCycles = {},
+  pagePath,
+  nativeLifeCyclesMap = {},
   commonPageJSFilePaths = [],
   subAppRoot = '',
-  { target, command, rootDir, outputPath }
+  { target, command }
 ) {
-  const pageJsContent = ejs.render(getTemplate(rootDir, 'page.js'), {
-    render_path: `${getAssetPath(join(outputPath, 'render.js'), join(outputPath, `${pageRoute}.js`))}`,
-    route: pageRoute,
-    native_lifecycles: `[${Object.keys(nativeLifeCycles).reduce((total, current, index) =>
-      index === 0 ? `${total}'${current}'` : `${total},'${current}'`, '')}]`,
-    init: `function init(window, document) {${commonPageJSFilePaths
-      .map(
-        filePath =>
-          `require('${getAssetPath(
-            filePath,
-            pageRoute
-          )}')(window, document)`
-      )
-      .join(';')}}`,
-    root: subAppRoot
-  });
+  const renderPath = getAssetPath('render', pageRoute);
+  const route = getSepProcessedPath(pagePath);
+  const nativeLifeCycles = `[${Object.keys(nativeLifeCyclesMap).reduce((total, current, index) => index === 0 ? `${total}'${current}'` : `${total},'${current}'`, '')}]`;
+  const init = `
+function init(window, document) {${commonPageJSFilePaths.map(filePath => `require('${getAssetPath(filePath, pageRoute)}')(window, document)`).join(';')}}`;
+
+  const pageJsContent = `
+const render = require('${renderPath}');
+${init}
+Page(render.createPageConfig('${route}', ${nativeLifeCycles}, init, '${subAppRoot}'))`;
 
   addFileToCompilation(compilation, {
     filename: `${pageRoute}.js`,
@@ -66,20 +62,20 @@ function generatePageXML(
   compilation,
   pageRoute,
   useComponent,
-  { target, command, outputPath }
+  { target, command, subAppRoot = '' }
 ) {
   let pageXmlContent;
-  if (target === MINIAPP && useComponent) {
+  if (RECURSIVE_TEMPLATE_TYPE.has(target) && useComponent) {
     pageXmlContent = '<element r="{{root}}"  />';
   } else {
-    const rootTmplFileName = 'root.' + adapter[target].xml;
-    const pageTmplFilePath = `${pageRoute}.` + adapter[target].xml;
-    pageXmlContent = `<import src="${getAssetPath(join(outputPath, rootTmplFileName), join(outputPath, pageTmplFilePath))}"/>
-    <template is="element" data="{{r: root}}"  />`;
+    const rootTmplFileName = join(subAppRoot, `root${platformMap[target].extension.xml}`);
+    const pageTmplFilePath = `${pageRoute}${platformMap[target].extension.xml}`;
+    pageXmlContent = `<import src="${getAssetPath(rootTmplFileName, pageTmplFilePath)}"/>
+<template is="RAX_TMPL_ROOT_CONTAINER" data="{{r: root}}"  />`;
   }
 
   addFileToCompilation(compilation, {
-    filename: `${pageRoute}.${adapter[target].xml}`,
+    filename: `${pageRoute}${platformMap[target].extension.xml}`,
     content: pageXmlContent,
     target,
     command,
@@ -90,19 +86,25 @@ function generatePageJSON(
   compilation,
   pageConfig,
   useComponent,
+  usingComponents, usingPlugins,
   pageRoute,
-  { target, command, outputPath }
+  { target, command, subAppRoot = '' }
 ) {
   if (!pageConfig.usingComponents) {
     pageConfig.usingComponents = {};
   }
-  const elementPath = getAssetPath(
-    join(outputPath, 'comp'),
-    join(outputPath, `${pageRoute}.js`)
-  );
-  if (useComponent || target !== MINIAPP) {
-    pageConfig.usingComponents.element = elementPath;
+
+  if (useComponent || !RECURSIVE_TEMPLATE_TYPE.has(target)) {
+    pageConfig.usingComponents.element = getAssetPath(join(subAppRoot, 'comp'), pageRoute);
   }
+
+  Object.keys(usingComponents).forEach(component => {
+    const componentPath = usingComponents[component].path;
+    pageConfig.usingComponents[component] = isNpmModule(componentPath) ? componentPath : getAssetPath(rmCurDirPathSymbol(componentPath), pageRoute);
+  });
+  Object.keys(usingPlugins).forEach(plugin => {
+    pageConfig.usingComponents[plugin] = usingPlugins[plugin].path;
+  });
 
   addFileToCompilation(compilation, {
     filename: `${pageRoute}.json`,

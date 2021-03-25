@@ -1,14 +1,17 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { isMiniApp } from 'universal-env';
-import { createWindow } from '../window';
+import createWindow from '../window';
 import createDocument from '../document';
 import cache from '../utils/cache';
 
-export default function(init, config, packageName = 'main') {
+export default function(init, config, packageName = '', nativeAppConfig = {}) {
   cache.setConfig(config);
+  const { onLaunch, onShow, onHide, onError, onPageNotFound, ...rest } = nativeAppConfig;
   const appConfig = {
     launched: isMiniApp,
     onLaunch(options) {
+      onLaunch && onLaunch(options);
+
       const window = createWindow();
       cache.setWindow(packageName, window);
 
@@ -41,8 +44,10 @@ export default function(init, config, packageName = 'main') {
       this.window = window;
     },
     onShow(options) {
+      onShow && onShow(options);
+
+      this.__showOptions = options;
       if (this.window && this.launched) {
-        this.__showOptions = options;
         this.window.$$trigger('appshow', {
           event: {
             options,
@@ -52,6 +57,8 @@ export default function(init, config, packageName = 'main') {
       }
     },
     onHide() {
+      onHide && onHide();
+
       if (this.window) {
         this.window.$$trigger('apphide', {
           event: {
@@ -61,6 +68,8 @@ export default function(init, config, packageName = 'main') {
       }
     },
     onError(err) {
+      onError && onError(err);
+
       if (this.window) {
         // eslint-disable-next-line no-undef
         const pages = getCurrentPages() || [];
@@ -79,6 +88,8 @@ export default function(init, config, packageName = 'main') {
       }
     },
     onPageNotFound(options) {
+      onPageNotFound && onPageNotFound(options);
+
       if (this.window) {
         this.window.$$trigger('pagenotfound', {
           event: {
@@ -87,7 +98,12 @@ export default function(init, config, packageName = 'main') {
           }
         });
       }
-    }
+    },
+    requireModule(target) {
+      if (isMiniApp) return;
+      return require(`${target}`);
+    },
+    ...rest
   };
   if (isMiniApp) {
     appConfig.onShareAppMessage = function(options) {
