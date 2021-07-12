@@ -28,7 +28,7 @@ module.exports = function scriptLoader(content) {
   }
 
   const loaderOptions = getOptions(this);
-  const { rootDir, disableCopyNpm, outputPath, mode, entryPath, platform, importedComponent = '', isRelativeMiniappComponent = false, aliasEntries, constantDir } = loaderOptions;
+  const { rootDir, disableCopyNpm, outputPath, mode, entryPath, platform, importedComponent = '', isRelativeMiniappComponent = false, aliasEntries, constantDir, externals = {} } = loaderOptions;
   const rootContext = this.rootContext;
   const isJSON = isJSONFile(this.resourcePath);
   const isAppJSon = this.resourcePath === join(rootContext, 'src', 'app.json');
@@ -84,7 +84,8 @@ module.exports = function scriptLoader(content) {
             outputPath,
             disableCopyNpm,
             platform,
-            aliasEntries
+            aliasEntries,
+            externals
           }
         ]
       ],
