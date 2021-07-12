@@ -5,12 +5,15 @@ import createDocument from '../document';
 import cache from '../utils/cache';
 
 export default function(init, config, packageName = '', nativeAppConfig = {}) {
-  cache.setConfig(config);
+  cache.setConfig({
+    ...config,
+    mainPackageName: packageName,
+  });
   const { onLaunch, onShow, onHide, onError, onPageNotFound, ...rest } = nativeAppConfig;
   const appConfig = {
     launched: isMiniApp,
     onLaunch(options) {
-      onLaunch && onLaunch(options);
+      onLaunch && onLaunch.call(this, options);
 
       const window = createWindow();
       cache.setWindow(packageName, window);
@@ -24,7 +27,7 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
         this.__pageId = window.__pageId = currentPageId;
 
         init(window, currentDocument);
-        window.$$trigger('launch', {
+        window._trigger('launch', {
           event: {
             options,
             context: this
@@ -33,7 +36,7 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
       } else {
         this.init = (document) => {
           init(window, document);
-          window.$$trigger('launch', {
+          window._trigger('launch', {
             event: {
               options,
               context: this
@@ -44,11 +47,11 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
       this.window = window;
     },
     onShow(options) {
-      onShow && onShow(options);
+      onShow && onShow.call(this, options);
 
       this.__showOptions = options;
       if (this.window && this.launched) {
-        this.window.$$trigger('appshow', {
+        this.window._trigger('appshow', {
           event: {
             options,
             context: this
@@ -57,10 +60,10 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
       }
     },
     onHide() {
-      onHide && onHide();
+      onHide && onHide.call(this);
 
       if (this.window) {
-        this.window.$$trigger('apphide', {
+        this.window._trigger('apphide', {
           event: {
             context: this
           }
@@ -68,18 +71,18 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
       }
     },
     onError(err) {
-      onError && onError(err);
+      onError && onError.call(this, err);
 
       if (this.window) {
         // eslint-disable-next-line no-undef
         const pages = getCurrentPages() || [];
         const currentPage = pages[pages.length - 1];
         if (currentPage && currentPage.window) {
-          currentPage.window.$$trigger('error', {
+          currentPage.window._trigger('error', {
             event: err
           });
         }
-        this.window.$$trigger('apperror', {
+        this.window._trigger('apperror', {
           event: {
             context: this,
             error: err
@@ -88,10 +91,10 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
       }
     },
     onPageNotFound(options) {
-      onPageNotFound && onPageNotFound(options);
+      onPageNotFound && onPageNotFound.call(this, options);
 
       if (this.window) {
-        this.window.$$trigger('pagenotfound', {
+        this.window._trigger('pagenotfound', {
           event: {
             options,
             context: this
@@ -99,9 +102,13 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
         });
       }
     },
-    requireModule(target) {
-      if (isMiniApp) return;
-      return require(`${target}`);
+    // document modify callback for override context's document
+    __documentModifyCallbacks: [],
+    _dispatchDocumentModify(val) {
+      // dispatch document modify when page toggle
+      this.__documentModifyCallbacks.forEach(cb => {
+        cb(val);
+      });
     },
     ...rest
   };
@@ -109,7 +116,7 @@ export default function(init, config, packageName = '', nativeAppConfig = {}) {
     appConfig.onShareAppMessage = function(options) {
       if (this.window) {
         const shareInfo = {};
-        this.window.$$trigger('appshare', {
+        this.window._trigger('appshare', {
           event: { options, shareInfo }
         });
         return shareInfo.content;

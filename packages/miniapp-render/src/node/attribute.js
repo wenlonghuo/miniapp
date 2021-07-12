@@ -1,4 +1,4 @@
-import tool from '../utils/tool';
+import { toCamel } from '../utils/tool';
 
 class Attribute {
   constructor(element) {
@@ -14,14 +14,19 @@ class Attribute {
       element.style.cssText = value;
     } else {
       if (name.indexOf('data-') === 0) {
-        const datasetName = tool.toCamel(name.substr(5));
+        const datasetName = toCamel(name.substr(5));
         element.dataset[datasetName] = value;
       }
-      const payload = {
-        path: `${element._path}.${name}`,
-        value: value
-      };
-      element._triggerUpdate(payload, immediate);
+      if (!element.__hasExtraAttribute && name !== 'id' && name !== 'class') {
+        element.__hasExtraAttribute = true; // Indicates that the element has extra attributes besides id/style/class
+      }
+      if (element._isRendered()) {
+        const payload = {
+          path: `${element._path}.${name}`,
+          value: value
+        };
+        element._triggerUpdate(payload, immediate);
+      }
     }
   }
 
@@ -30,7 +35,7 @@ class Attribute {
     if (name === 'style') {
       return element.style.cssText || null;
     } else if (name.indexOf('data-') === 0) {
-      const datasetName = tool.toCamel(name.substr(5));
+      const datasetName = toCamel(name.substr(5));
       return element.dataset[datasetName];
     }
     return this.__value[name] || null;
@@ -67,7 +72,7 @@ class Attribute {
       element.id = '';
     } else {
       if (name.indexOf('data-') === 0) {
-        const datasetName = tool.toCamel(name.substr(5));
+        const datasetName = toCamel(name.substr(5));
         delete element.dataset[datasetName];
       }
       const payload = {

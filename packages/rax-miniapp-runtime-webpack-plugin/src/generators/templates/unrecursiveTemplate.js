@@ -42,9 +42,9 @@ function buildUnrecursiveTemplate(target, customComponentsConfig) {
   const { internalComponents, derivedComponents, nestElements, sjs, adapter } = platformConfig[target];
 
   const customInternalComponents = modifyInternalComponents(internalComponents, customComponentsConfig);
-  const miniComponents = createMiniComponents(customInternalComponents, adapter);
+  const miniComponents = createMiniComponents(customInternalComponents, derivedComponents, adapter);
 
-  let template = buildBaseTemplate(sjs, { isRecursiveTemplate: false });
+  let template = buildBaseTemplate(sjs, { isRecursiveTemplate: false, adapter });
   for (let i = 0; i < BASE_LEVEL; i++) {
     template += buildChildrenTemplate(i, adapter, { isRecursiveTemplate: false, restart: i === BASE_LEVEL - 1 });
     template += buildFloor(i, target, {

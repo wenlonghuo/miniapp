@@ -1,9 +1,11 @@
+import { isUndef } from '../utils/tool';
+
 export default class ClassList extends Set {
   static _create(className, element) {
     const instance = new Set();
     instance.__proto__ = ClassList.prototype;
     instance.__element = element;
-    className.trim().split(/\s+/).forEach((s) => s !== '' && instance.add(s));
+    className.trim().split(/\s+/).forEach((s) => s !== '' && instance.add(s, false));
     return instance;
   }
 
@@ -12,10 +14,12 @@ export default class ClassList extends Set {
     this.forEach(item => classArray.push(item));
     return classArray.join(' ');
   }
-  add(s) {
+  add(s, triggerUpdate = true) {
     if (typeof s === 'string' && s !== '') {
       super.add(s);
-      this._update();
+      if (triggerUpdate) {
+        this._update();
+      }
     }
 
     return this;
@@ -49,7 +53,7 @@ export default class ClassList extends Set {
   }
 
   toggle(token, force) {
-    if (force !== undefined) {
+    if (!isUndef(force)) {
       force === true ? this.add(token) : this.remove(token);
       return force;
     }

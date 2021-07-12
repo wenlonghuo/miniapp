@@ -70,7 +70,7 @@ module.exports = {
     const { ast, programPath, defaultExportedPath, exportComponentPath, renderFunctionPath,
       useCreateStyle, useClassnames, dynamicValue, dynamicRef, dynamicStyle, dynamicEvents, imported,
       contextList, refs, componentDependentProps, renderItemFunctions, renderPropsFunctions, renderPropsEmitter, renderPropsListener, eventHandler, eventHandlers = [] } = parsed;
-    const { platform, type, cwd, outputPath, sourcePath, resourcePath, disableCopyNpm } = options;
+    const { platform, type, cwd, outputPath, sourcePath, resourcePath, disableCopyNpm, virtualHost } = options;
     if (type !== 'app' && (!defaultExportedPath || !defaultExportedPath.node)) {
       // Can not found default export, otherwise app.js is excluded.
       return;
@@ -123,11 +123,11 @@ module.exports = {
     renameAppConfig(ast, sourcePath, resourcePath, type);
 
     if (!disableCopyNpm) {
-      renameNpmModules(ast, targetFileDir, outputPath, cwd);
+      renameNpmModules(ast, targetFileDir, outputPath, cwd, resourcePath);
     }
 
     if (type !== 'app') {
-      addDefine(programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath);
+      addDefine({programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath, virtualHost});
     }
 
     removeDefaultImports(ast);
@@ -285,12 +285,13 @@ function ensureIndexPathInImports(ast, sourcePath, resourcePath, type) {
   });
 }
 
-function renameNpmModules(ast, targetFileDir, outputPath, cwd) {
+function renameNpmModules(ast, targetFileDir, outputPath, cwd, resourcePath) {
   const source = (value, targetFileDir, outputPath, rootContext) => {
     const npmName = getNpmName(value);
     const nodeModulePath = join(rootContext, 'node_modules');
     const searchPaths = [nodeModulePath];
-    const target = require.resolve(npmName, { paths: searchPaths });
+    // Use resolve instead of require.resolve because require.resolve will read the exports field first, which is not expected
+    const target = resolveModule.sync(npmName, { basedir: dirname(resourcePath), paths: searchPaths, preserveSymlinks: false });
     // In tnpm, target will be like following (symbol linked path):
     // ***/_universal-toast_1.0.0_universal-toast/lib/index.js
     let packageJSONPath;
@@ -328,7 +329,7 @@ function renameNpmModules(ast, targetFileDir, outputPath, cwd) {
   });
 }
 
-function addDefine(programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath) {
+function addDefine({programPath, type, userDefineType, eventHandlers, useCreateStyle, useClassnames, exportedVariables, runtimePath, virtualHost}) {
   let safeCreateInstanceId;
   let importedIdentifier;
   switch (type) {
@@ -380,14 +381,23 @@ function addDefine(programPath, type, userDefineType, eventHandlers, useCreateSt
     )
   );
 
+  const optionsVariableProperties = [];
+  // __create_component__(__class_def__, { baseConfig: { virtualHost: true }})
+  if (type === 'component' && virtualHost) {
+    const baseConfig = t.objectProperty(
+      t.identifier('baseConfig'),
+      t.objectExpression([t.objectProperty(t.identifier('virtualHost'), t.booleanLiteral(true))])
+    );
+    optionsVariableProperties.push(baseConfig);
+  }
+
   // __create_component__(__class_def__, { events: ['_e*']})
   if (eventHandlers.length > 0) {
-    args.push(
-      t.objectExpression([
-        t.objectProperty(t.identifier('events'), t.arrayExpression(eventHandlers.map(e => t.stringLiteral(e))))
-      ])
-    );
+    const events = t.objectProperty(t.identifier('events'), t.arrayExpression(eventHandlers.map(e => t.stringLiteral(e))));
+    optionsVariableProperties.push(events);
   }
+
+  args.push(t.objectExpression(optionsVariableProperties));
 
   programPath.node.body.push(
     t.expressionStatement(
